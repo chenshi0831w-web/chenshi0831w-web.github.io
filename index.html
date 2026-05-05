@@ -7,15 +7,14 @@
         body { 
             margin: 0; 
             overflow: hidden; 
-            /* 背景图设置 */
-            background: url('images/background.jpg') no-repeat center center fixed; 
+            /* 背景图：删除了 images/ */
+            background: url('background.jpg') no-repeat center center fixed; 
             background-size: cover; 
             background-color: #0a0f0a; 
             font-family: "Helvetica Neue", Arial, "Meiryo", sans-serif; 
         }
         canvas { display: block; }
         
-        /* UI显示 - 增加半透明黑底，确保在有背景图时依然清晰 */
         #ui { 
             position: absolute; top: 20px; left: 20px; color: #0f0; font-size: 22px; z-index: 10; 
             text-shadow: 2px 2px #000; pointer-events: none;
@@ -31,7 +30,6 @@
         .heart::before { top: -7.5px; left: 0; }
         .heart::after { top: 0; left: 7.5px; }
 
-        /* 遮罩层 UI */
         .overlay { 
             position: absolute; inset: 0; background: rgba(0,0,0,0.85); 
             display: flex; flex-direction: column; justify-content: center; align-items: center; 
@@ -42,7 +40,6 @@
         button { padding: 12px 40px; font-size: 18px; background: #00ffcc; border: none; cursor: pointer; border-radius: 40px; font-weight: bold; color: #111; transition: 0.3s; }
         button:hover { transform: scale(1.1); background: #fff; }
 
-        /* 图鉴系统 */
         .book-container { 
             display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; 
             max-width: 1000px; max-height: 60vh; overflow-y: auto; padding: 20px;
@@ -53,6 +50,7 @@
         }
         .bug-card img { width: 70px; height: 70px; object-fit: contain; }
         
+        /* 游戏结束背景：删除了 images/ */
         #gameover-screen img { max-width: 80%; max-height: 35vh; object-fit: contain; margin-bottom: 20px; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -78,7 +76,7 @@
     </div>
 
     <div id="gameover-screen" class="overlay" style="display: none; animation: fadeIn 0.5s ease;">
-        <img src="images/gameover_bg.png" alt="GameOver">
+        <img src="gameover_bg.png" alt="GameOver">
         <div style="font-size: 32px; color: #ffcc00; margin-bottom: 20px;">SCORE: <span id="final-score">0</span></div>
         <div class="btn-group">
             <button onclick="restartGame()">再挑戦</button>
@@ -87,8 +85,9 @@
     </div>
 
     <canvas id="g"></canvas>
-    <audio id="snd-spray" src="sound/spray_long.mp3" preload="auto"></audio>
-    <audio id="snd-bomb" src="sound/bomb.mp3" preload="auto"></audio>
+    <!-- 音频：删除了 sound/ -->
+    <audio id="snd-spray" src="spray_long.mp3" preload="auto"></audio>
+    <audio id="snd-bomb" src="bomb.mp3" preload="auto"></audio>
 
     <script src="frog.js"></script>
 <script>
@@ -96,20 +95,21 @@
     const sEl = document.getElementById('s'), lEl = document.getElementById('l'), hpEl = document.getElementById('hp-ui');
     
     const SIZE_PLAYER = 60, SIZE_BUG = 50, SIZE_BOSS = 150;
-    const imgP = new Image(); imgP.src = 'images/spray.png';
-    const imgE1 = new Image(); imgE1.src = 'images/01.png'; // 瓢虫
-    const imgE2 = new Image(); imgE2.src = 'images/02.png'; // 蚊子
-    const imgBoss = new Image(); imgBoss.src = 'images/03.png'; // 蟑螂Boss
+    // 图片资源：全部删除了 images/
+    const imgP = new Image(); imgP.src = 'spray.png';
+    const imgE1 = new Image(); imgE1.src = '01.png'; 
+    const imgE2 = new Image(); imgE2.src = '02.png'; 
+    const imgBoss = new Image(); imgBoss.src = '03.png'; 
 
     const frogImgs = { fIdle: new Image(), fAtk: new Image(), fEat: new Image() };
-    frogImgs.fIdle.src = 'images/frog_idle.png';
-    frogImgs.fAtk.src = 'images/frog_atk.png';
-    frogImgs.fEat.src = 'images/frog_eat.png';
+    frogImgs.fIdle.src = 'frog_idle.png';
+    frogImgs.fAtk.src = 'frog_atk.png';
+    frogImgs.fEat.src = 'frog_eat.png';
 
     const bugData = [
-        { name: 'テントウムシ', danger: 'C', img: 'images/01.png', desc: 'よくいる害虫。' },
-        { name: 'カ（蚊）', danger: 'B', img: 'images/02.png', desc: '素早く血を狙う。' },
-        { name: '黒い悪魔', danger: 'SSS', img: 'images/03.png', desc: '圧倒的な生命力。子供を産み落として増殖する。' }
+        { name: 'テントウムシ', danger: 'C', img: '01.png', desc: 'よくいる害虫。' },
+        { name: 'カ（蚊）', danger: 'B', img: '02.png', desc: '素早く血を狙う。' },
+        { name: '黒い悪魔', danger: 'SSS', img: '03.png', desc: '圧倒的な生命力。' }
     ];
 
     let score, level, active = false, keys = {}, bullets = [], enemies = [], lastSpawn, pHP, pInvuln, myFrog, gameStartTime;
@@ -159,7 +159,6 @@
         let type = Math.random();
         let en = { x: 0, y: 0, sz: SIZE_BUG, hp: 3, spd: 1.5 + (level*0.2), img: imgE1, isBoss: false };
         
-        // 分数大于400有概率出 Boss (03.png)
         if(score > 400 && type > 0.88) { 
             en.sz = SIZE_BOSS; en.hp = 150; en.spd = 2.4; en.img = imgBoss; en.isBoss = true;
         } else if(type > 0.5) { 
@@ -177,13 +176,12 @@
     function loop(ts) {
         if (!active) return;
 
-        // --- 时间难度递增 ---
         let secondsPassed = (ts - gameStartTime) / 1000;
         let dynamicInterval = Math.max(250, (1400 - level * 100) - (secondsPassed * 8));
 
         if (ts - lastSpawn > dynamicInterval) { 
             spawnEnemy();
-            if (secondsPassed > 60 && Math.random() < 0.3) spawnEnemy(); // 1分钟后概率刷双倍
+            if (secondsPassed > 60 && Math.random() < 0.3) spawnEnemy(); 
             lastSpawn = ts;
         }
 
@@ -191,14 +189,12 @@
         if (score >= 150 && !myFrog && typeof Frog !== 'undefined') myFrog = new Frog(p, frogImgs);
         if (myFrog) myFrog.update(enemies, ts, (add) => { score += add; sEl.innerText = score; });
 
-        // --- 移动控制：同时支持 WASD 和 方向键 ---
         if (keys.KeyW || keys.ArrowUp) p.y -= p.spd;
         if (keys.KeyS || keys.ArrowDown) p.y += p.spd;
         if (keys.KeyA || keys.ArrowLeft) p.x -= p.spd;
         if (keys.KeyD || keys.ArrowRight) p.x += p.spd;
         p.angle += 0.08;
 
-        // 喷射逻辑
         const sSnd = document.getElementById('snd-spray');
         if (keys.Space) {
             if(sSnd.paused) sSnd.play();
@@ -221,13 +217,10 @@
             let moveX = dx/dist, moveY = dy/dist;
             let finalSpd = e.spd;
 
-            // Boss 行为
             if(e.isBoss) {
                 let shift = Math.sin(ts / 180) * 1.4;
                 moveX += (dy/dist) * shift; moveY -= (dx/dist) * shift;
                 if(e.hp < 50) finalSpd *= 1.8;
-                
-                // --- 产卵逻辑：产下缩小版的自己 (03.png) ---
                 if(Math.random() < 0.015) {
                     enemies.push({ x: e.x + e.sz/2, y: e.y + e.sz/2, sz: 25, hp: 1, spd: 5, img: imgBoss, isBoss: false });
                 }
