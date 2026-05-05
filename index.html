@@ -1,154 +1,196 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GARDEN HUNTER</title>
+    <title>害虫ハンター：ガーデン最終決戦</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        canvas { display: block; background: #0a0f0a; touch-action: none; }
-        .ui-layer { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #fff; background: rgba(0,0,0,0.85); z-index: 100; }
-        .btn { padding: 15px 35px; font-size: 20px; background: #00ffcc; border: none; border-radius: 30px; cursor: pointer; margin: 10px; font-weight: bold; color: #000; }
-        #stats { position: absolute; top: 15px; left: 15px; color: #0f0; font-size: 22px; z-index: 50; text-shadow: 2px 2px #000; }
-        #p-btn { position: absolute; top: 15px; right: 15px; width: 45px; height: 45px; background: rgba(0,255,204,0.2); border: 2px solid #00ffcc; color: #00ffcc; border-radius: 50%; z-index: 50; cursor: pointer; font-weight: bold; }
+        body { 
+            margin: 0; overflow: hidden; 
+            background: url('background.jpg') no-repeat center center fixed; 
+            background-size: cover; background-color: #0a0f0a; 
+            font-family: "Helvetica Neue", Arial, "Meiryo", sans-serif; 
+            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+        }
+        canvas { display: block; touch-action: none; }
+        
+        #ui { 
+            position: absolute; top: 20px; left: 20px; color: #0f0; font-size: 22px; z-index: 10; 
+            text-shadow: 2px 2px #000; pointer-events: none;
+            background: rgba(0, 0, 0, 0.5); padding: 8px 15px; border-radius: 10px;
+        }
+        #hp-ui { 
+            position: absolute; top: 20px; right: 20px; display: flex; gap: 25px; z-index: 10;
+            background: rgba(0, 0, 0, 0.5); padding: 12px 20px; border-radius: 10px;
+        }
+        
+        /* 暂停按钮样式 */
+        #pause-btn {
+            position: absolute; bottom: 20px; right: 20px; width: 60px; height: 60px;
+            background: rgba(255, 255, 255, 0.2); border: 2px solid #00ffcc;
+            border-radius: 50%; color: #00ffcc; font-size: 30px; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; z-index: 110;
+        }
+
+        .heart { position: relative; width: 15px; height: 15px; background-color: #ff66cc; transform: rotate(-45deg); }
+        .heart::before, .heart::after { content: ''; position: absolute; width: 15px; height: 15px; background-color: #ff66cc; border-radius: 50%; }
+        .heart::before { top: -7.5px; left: 0; }
+        .heart::after { top: 0; left: 7.5px; }
+
+        .overlay { 
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85); 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            color: #fff; z-index: 100; text-align: center; padding: 20px; box-sizing: border-box; 
+        }
+        
+        button { padding: 12px 40px; font-size: 18px; background: #00ffcc; border: none; cursor: pointer; border-radius: 40px; font-weight: bold; color: #111; transition: 0.3s; }
+        button:hover { transform: scale(1.1); background: #fff; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div id="stats">Score: <span id="sc">0</span></div>
-    <button id="p-btn" onclick="tPause()">II</button>
+    <div id="ui">スコア: <span id="s">0</span> | レベル: <span id="l">1</span></div>
+    <div id="hp-ui"></div>
+    
+    <!-- 暂停按钮 -->
+    <div id="pause-btn" onclick="togglePause()">II</div>
 
-    <div id="start-menu" class="ui-layer">
-        <h1 style="color:#00ffcc; font-size: 40px;">GARDEN HUNTER</h1>
-        <button class="btn" onclick="sGame()">戦闘開始</button>
-        <button class="btn" style="background:#ffcc00" onclick="alert('【図鑑】\n01:テントウムシ (弱)\n02:カ (速)\n03:黒い悪魔 (強)')">図鑑を見る</button>
+    <div id="overlay-start" class="overlay">
+        <h1 style="font-size: 48px; color: #00ffcc; margin-bottom: 10px;">GARDEN HUNTER</h1>
+        <p><b>PC：</b>WASD移动 / Space射击 / Esc暂停<br><b>スマホ：</b>移动及射击</p>
+        <button onclick="startGame()">戦闘開始</button>
     </div>
 
-    <div id="pause-menu" class="ui-layer" style="display:none">
-        <h1 style="color:#ffcc00">PAUSED</h1>
-        <button class="btn" onclick="tPause()">再開する</button>
+    <!-- 暂停界面 -->
+    <div id="overlay-pause" class="overlay" style="display: none;">
+        <h1 style="color: #ffcc00;">PAUSED</h1>
+        <button onclick="togglePause()">再開する</button>
+    </div>
+
+    <div id="gameover-screen" class="overlay" style="display: none;">
+        <img src="gameover_bg.png" alt="GameOver" style="max-width:80%; max-height:35vh; margin-bottom:20px;">
+        <div style="font-size: 32px; color: #ffcc00; margin-bottom: 20px;">SCORE: <span id="final-score">0</span></div>
+        <button onclick="location.reload()">タイトルへ</button>
     </div>
 
     <canvas id="g"></canvas>
-    <audio id="sd1" src="spray_long.mp3" loop></audio>
-    <audio id="sd2" src="bomb.mp3"></audio>
+    <audio id="snd-spray" src="spray_long.mp3" preload="auto"></audio>
+    <audio id="snd-bomb" src="bomb.mp3" preload="auto"></audio>
 
-    <script>
-        const cvs=document.getElementById('g'), ctx=cvs.getContext('2d');
-        let active=false, paused=false, score=0, keys={}, enemies=[], bullets=[], lastSpawn=0;
-        let p = {x:0, y:0, r:25, a:0};
-        
-        const imgP=new Image(); imgP.src='spray.png';
-        const imgE=new Image(); imgE.src='01.png'; // 确保你的仓库里有 01.png
+    <script src="frog.js"></script>
+<script>
+    const cvs = document.getElementById('g'), ctx = cvs.getContext('2d');
+    const sEl = document.getElementById('s'), lEl = document.getElementById('l'), hpEl = document.getElementById('hp-ui');
+    
+    const SIZE_PLAYER = 60, SIZE_BUG = 50, SIZE_BOSS = 150;
+    const imgP = new Image(); imgP.src = 'spray.png';
+    const imgE1 = new Image(); imgE1.src = '01.png'; 
+    const imgE2 = new Image(); imgE2.src = '02.png'; 
+    const imgBoss = new Image(); imgBoss.src = '03.png'; 
 
-        cvs.width=window.innerWidth; cvs.height=window.innerHeight;
+    const frogImgs = { fIdle: new Image(), fAtk: new Image(), fEat: new Image() };
+    frogImgs.fIdle.src = 'frog_idle.png'; frogImgs.fAtk.src = 'frog_atk.png'; frogImgs.fEat.src = 'frog_eat.png';
 
-        window.onkeydown=e=>{ keys[e.code]=true; if(e.code==='Escape') tPause(); };
-        window.onkeyup=e=>{ keys[e.code]=false; if(e.code==='Space') document.getElementById('sd1').pause(); };
-        
-        // 手机触摸修复
-        cvs.addEventListener('touchstart', e=>{ 
-            if(active && !paused){
-                e.preventDefault();
-                keys['Space']=true; 
-                p.x=e.touches[0].clientX; p.y=e.touches[0].clientY; 
-            }
-        }, {passive: false});
-        cvs.addEventListener('touchmove', e=>{ 
-            if(active && !paused){
-                e.preventDefault();
-                p.x=e.touches[0].clientX; p.y=e.touches[0].clientY; 
-            }
-        }, {passive: false});
-        cvs.addEventListener('touchend', ()=>{ keys['Space']=false; document.getElementById('sd1').pause(); });
+    let score, level, active = false, paused = false, keys = {}, bullets = [], enemies = [], lastSpawn, pHP, pInvuln, myFrog, gameStartTime;
+    let p = { x: 0, y: 0, r: 25, spd: 7, angle: 0, lf: 0 };
 
-        function tPause() { if(!active) return; paused=!paused; document.getElementById('pause-menu').style.display=paused?'flex':'none'; if(paused) document.getElementById('sd1').pause(); }
-        
-        function sGame() { 
-            active=true; 
-            document.getElementById('start-menu').style.display='none'; 
-            p.x=cvs.width/2; p.y=cvs.height/2; 
-            score=0; enemies=[]; bullets=[];
-            requestAnimationFrame(loop); 
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+
+    window.onkeydown = e => {
+        keys[e.code] = true;
+        if(e.code === 'Escape') togglePause(); // PC Esc键暂停
+    };
+    window.onkeyup = e => { 
+        keys[e.code] = false; 
+        if(e.code === 'Space') document.getElementById('snd-spray').pause(); 
+    };
+
+    // 触摸控制
+    cvs.addEventListener('touchstart', e => { if(active && !paused) { e.preventDefault(); keys['Space'] = true; p.x = e.touches[0].clientX; p.y = e.touches[0].clientY; } }, {passive: false});
+    cvs.addEventListener('touchend', () => { keys['Space'] = false; document.getElementById('snd-spray').pause(); }, {passive: false});
+    cvs.addEventListener('touchmove', e => { if(active && !paused) { e.preventDefault(); p.x = e.touches[0].clientX; p.y = e.touches[0].clientY; } }, {passive: false});
+
+    function togglePause() {
+        if(!active) return;
+        paused = !paused;
+        document.getElementById('overlay-pause').style.display = paused ? 'flex' : 'none';
+        if(paused) document.getElementById('snd-spray').pause();
+    }
+
+    function startGame() {
+        document.getElementById('overlay-start').style.display = 'none';
+        score = 0; level = 1; bullets = []; enemies = []; pHP = 3; pInvuln = 0; active = true; paused = false;
+        myFrog = null; p.x = cvs.width/2; p.y = cvs.height/2;
+        updateHPUI(); lastSpawn = performance.now(); gameStartTime = performance.now();
+        requestAnimationFrame(loop);
+    }
+
+    function updateHPUI() {
+        hpEl.innerHTML = '';
+        for(let i=0; i<pHP; i++) hpEl.innerHTML += `<div class="heart"></div>`;
+    }
+
+    function loop(ts) {
+        if (!active) return;
+        if (paused) { requestAnimationFrame(loop); return; } // 暂停逻辑
+
+        let secondsPassed = (ts - gameStartTime) / 1000;
+        let dynamicInterval = Math.max(250, (1400 - level * 100) - (secondsPassed * 8));
+
+        if (ts - lastSpawn > dynamicInterval) { 
+            let type = Math.random(), en = { x: 0, y: 0, sz: SIZE_BUG, hp: 3, spd: 1.5 + (level*0.2), img: imgE1, isBoss: false };
+            if(score > 400 && type > 0.88) { en.sz = SIZE_BOSS; en.hp = 150; en.spd = 2.4; en.img = imgBoss; en.isBoss = true; }
+            else if(type > 0.5) { en.img = imgE2; en.hp = 3; en.spd *= 1.6; }
+            let side = Math.floor(Math.random()*4);
+            if(side==0){ en.x=Math.random()*cvs.width; en.y=-en.sz; } else if(side==1){ en.x=Math.random()*cvs.width; en.y=cvs.height+en.sz; }
+            else if(side==2){ en.x=-en.sz; en.y=Math.random()*cvs.height; } else { en.x=cvs.width+en.sz; en.y=Math.random()*cvs.height; }
+            enemies.push(en); lastSpawn = ts;
         }
 
-        function loop(ts) {
-            if(!active) return;
-            if(!paused) {
-                // 每隔 1000 毫秒生成一个怪物
-                if(ts - lastSpawn > 1000) {
-                    enemies.push({
-                        x: Math.random()*cvs.width, 
-                        y: -50, 
-                        hp: 3, 
-                        speed: 2 + Math.random()*2 
-                    });
-                    lastSpawn = ts;
-                }
+        if (pInvuln > 0) pInvuln -= 16;
+        if (score >= 150 && !myFrog && typeof Frog !== 'undefined') myFrog = new Frog(p, frogImgs);
+        if (myFrog) myFrog.update(enemies, ts, (add) => { score += add; sEl.innerText = score; });
 
-                // 键盘移动
-                if(keys.KeyW || keys.ArrowUp) p.y-=6;
-                if(keys.KeyS || keys.ArrowDown) p.y+=6;
-                if(keys.KeyA || keys.ArrowLeft) p.x-=6;
-                if(keys.KeyD || keys.ArrowRight) p.x+=6;
-                
-                p.a += 0.08; // 自动旋转喷雾器
+        if (keys.KeyW || keys.ArrowUp) p.y -= p.spd; if (keys.KeyS || keys.ArrowDown) p.y += p.spd;
+        if (keys.KeyA || keys.ArrowLeft) p.x -= p.spd; if (keys.KeyD || keys.ArrowRight) p.x += p.spd;
+        p.x = Math.max(25, Math.min(cvs.width-25, p.x)); p.y = Math.max(25, Math.min(cvs.height-25, p.y));
+        p.angle += 0.08;
 
-                // 发射子弹
-                if(keys.Space) { 
-                    document.getElementById('sd1').play();
-                    if(Math.random()>0.7) {
-                        bullets.push({x:p.x, y:p.y, vx:Math.cos(p.a)*12, vy:Math.sin(p.a)*12, life:1});
-                    }
-                }
-
-                // 更新子弹
-                for(let i=bullets.length-1; i>=0; i--) {
-                    let b = bullets[i];
-                    b.x += b.vx; b.y += b.vy; b.life -= 0.02;
-                    if(b.life <= 0) bullets.splice(i,1);
-                }
-
-                // 更新怪物
-                for(let i=enemies.length-1; i>=0; i--) {
-                    let e = enemies[i];
-                    e.y += e.speed;
-
-                    // 碰撞检测
-                    bullets.forEach(b => {
-                        let dist = Math.sqrt((b.x-e.x)**2 + (b.y-e.y)**2);
-                        if(dist < 30) { e.hp -= 1; b.life = 0; }
-                    });
-
-                    if(e.hp <= 0) {
-                        enemies.splice(i,1);
-                        score += 10;
-                        document.getElementById('sc').innerText = score;
-                        let s2 = document.getElementById('sd2'); s2.currentTime=0; s2.play();
-                    }
-
-                    if(e.y > cvs.height) enemies.splice(i,1);
-                }
+        const sSnd = document.getElementById('snd-spray');
+        if (keys.Space) {
+            if(sSnd.paused) sSnd.play();
+            if(ts - p.lf > 65) {
+                for(let i=0; i<3; i++) bullets.push({ x: p.x, y: p.y, vx: Math.cos(p.angle+(Math.random()-0.5)*0.6)*14, vy: Math.sin(p.angle+(Math.random()-0.5)*0.6)*14, life: 1.0, r: 5 });
+                p.lf = ts;
             }
-
-            // 绘图
-            ctx.clearRect(0,0,cvs.width,cvs.height);
-            
-            // 画子弹
-            ctx.fillStyle='#0f0';
-            bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x,b.y,5,0,Math.PI*2); ctx.fill(); });
-
-            // 画怪物
-            enemies.forEach(e => { ctx.drawImage(imgE, e.x-25, e.y-25, 50, 50); });
-
-            // 画玩家
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            ctx.rotate(p.a);
-            ctx.drawImage(imgP, -30, -30, 60, 60);
-            ctx.restore();
-
-            requestAnimationFrame(loop);
         }
-    </script>
+
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i]; b.x += b.vx; b.y += b.vy; b.life -= 0.035; b.r += 0.4;
+            if (b.life <= 0) bullets.splice(i, 1);
+        }
+
+        enemies.forEach((e, ei) => {
+            let dx = p.x - (e.x + e.sz/2), dy = p.y - (e.y + e.sz/2), dist = Math.sqrt(dx*dx + dy*dy);
+            e.x += (dx/dist) * e.spd; e.y += (dy/dist) * e.spd;
+            if (pInvuln <= 0 && dist < p.r + e.sz/2) {
+                pHP--; updateHPUI(); pInvuln = 1500;
+                if (pHP <= 0) { active = false; document.getElementById('final-score').innerText = score; document.getElementById('gameover-screen').style.display = 'flex'; }
+            }
+            bullets.forEach(b => { if (Math.sqrt((b.x-(e.x+e.sz/2))**2 + (b.y-(e.y+e.sz/2))**2) < b.r + e.sz/2) e.hp -= 0.22; });
+            if (e.hp <= 0) { enemies.splice(ei, 1); score += 10; sEl.innerText = score; document.getElementById('snd-bomb').currentTime = 0; document.getElementById('snd-bomb').play(); }
+        });
+
+        level = Math.floor(score / 500) + 1; lEl.innerText = level;
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        if (myFrog) myFrog.draw(ctx);
+        bullets.forEach(b => { ctx.fillStyle = `rgba(180, 255, 100, ${b.life * 0.5})`; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill(); });
+        enemies.forEach(e => { ctx.drawImage(e.img, e.x, e.y, e.sz, e.sz); });
+        ctx.save(); ctx.translate(p.x, p.y); if (pInvuln > 0 && Math.floor(ts/100)%2) ctx.globalAlpha = 0.3;
+        ctx.rotate(p.angle); ctx.drawImage(imgP, -30, -30, 60, 60); ctx.restore();
+        requestAnimationFrame(loop);
+    }
+</script>
 </body>
 </html>
