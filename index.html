@@ -2,18 +2,23 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <!-- 禁止手机端自动缩放，提升操作手感 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>害虫ハンター：ガーデン最終決戦</title>
     <style>
         body { 
             margin: 0; 
             overflow: hidden; 
-            /* 背景图：删除了 images/ */
             background: url('background.jpg') no-repeat center center fixed; 
             background-size: cover; 
             background-color: #0a0f0a; 
             font-family: "Helvetica Neue", Arial, "Meiryo", sans-serif; 
+            /* 防止手机上长按弹出菜单 */
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        canvas { display: block; }
+        canvas { display: block; touch-action: none; }
         
         #ui { 
             position: absolute; top: 20px; left: 20px; color: #0f0; font-size: 22px; z-index: 10; 
@@ -50,7 +55,6 @@
         }
         .bug-card img { width: 70px; height: 70px; object-fit: contain; }
         
-        /* 游戏结束背景：删除了 images/ */
         #gameover-screen img { max-width: 80%; max-height: 35vh; object-fit: contain; margin-bottom: 20px; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -62,7 +66,7 @@
     
     <div id="overlay-start" class="overlay">
         <h1 style="font-size: 48px; color: #00ffcc; margin-bottom: 10px;">GARDEN HUNTER</h1>
-        <p><b>方向キー / WASD</b>：移動 | <b>スペース</b>：殺虫剤<br>時間が経つほど害虫は増える...生き残れ！</p>
+        <p><b>PC：</b>方向キーで移動 / スペースで発射<br><b>スマホ：</b>スライドで移動 / タップで発射</p>
         <div class="btn-group">
             <button onclick="startGame()">戦闘開始</button>
             <button style="background: #ffcc00;" onclick="showBook()">図鑑を見る</button>
@@ -85,7 +89,6 @@
     </div>
 
     <canvas id="g"></canvas>
-    <!-- 音频：删除了 sound/ -->
     <audio id="snd-spray" src="spray_long.mp3" preload="auto"></audio>
     <audio id="snd-bomb" src="bomb.mp3" preload="auto"></audio>
 
@@ -95,7 +98,6 @@
     const sEl = document.getElementById('s'), lEl = document.getElementById('l'), hpEl = document.getElementById('hp-ui');
     
     const SIZE_PLAYER = 60, SIZE_BUG = 50, SIZE_BOSS = 150;
-    // 图片资源：全部删除了 images/
     const imgP = new Image(); imgP.src = 'spray.png';
     const imgE1 = new Image(); imgE1.src = '01.png'; 
     const imgE2 = new Image(); imgE2.src = '02.png'; 
@@ -116,11 +118,34 @@
     let p = { x: 0, y: 0, r: 25, spd: 7, angle: 0, lf: 0 };
 
     cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+
+    // --- PC 键盘控制 ---
     window.onkeydown = e => keys[e.code] = true;
     window.onkeyup = e => { 
         keys[e.code] = false; 
         if(e.code === 'Space') document.getElementById('snd-spray').pause(); 
     };
+
+    // --- 手机触摸控制逻辑 ---
+    cvs.addEventListener('touchstart', (e) => {
+        if(!active) return;
+        e.preventDefault();
+        keys['Space'] = true;
+        const touch = e.touches[0];
+        p.x = touch.clientX; p.y = touch.clientY;
+    }, { passive: false });
+
+    cvs.addEventListener('touchend', (e) => {
+        keys['Space'] = false;
+        document.getElementById('snd-spray').pause(); 
+    }, { passive: false });
+
+    cvs.addEventListener('touchmove', (e) => {
+        if(!active) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        p.x = touch.clientX; p.y = touch.clientY;
+    }, { passive: false });
 
     function showBook() {
         document.getElementById('encyclopedia').style.display = 'flex';
@@ -145,6 +170,10 @@
         p.x = cvs.width/2; p.y = cvs.height/2;
         updateHPUI();
         lastSpawn = performance.now();
+        
+        // 手机端音频解锁
+        document.getElementById('snd-spray').play(); document.getElementById('snd-spray').pause();
+        
         requestAnimationFrame(loop);
     }
 
@@ -158,13 +187,11 @@
     function spawnEnemy() {
         let type = Math.random();
         let en = { x: 0, y: 0, sz: SIZE_BUG, hp: 3, spd: 1.5 + (level*0.2), img: imgE1, isBoss: false };
-        
         if(score > 400 && type > 0.88) { 
             en.sz = SIZE_BOSS; en.hp = 150; en.spd = 2.4; en.img = imgBoss; en.isBoss = true;
         } else if(type > 0.5) { 
             en.img = imgE2; en.hp = 3; en.spd *= 1.6; 
         }
-
         let side = Math.floor(Math.random()*4);
         if(side==0){ en.x=Math.random()*cvs.width; en.y=-en.sz; }
         else if(side==1){ en.x=Math.random()*cvs.width; en.y=cvs.height+en.sz; }
@@ -175,7 +202,6 @@
 
     function loop(ts) {
         if (!active) return;
-
         let secondsPassed = (ts - gameStartTime) / 1000;
         let dynamicInterval = Math.max(250, (1400 - level * 100) - (secondsPassed * 8));
 
@@ -189,10 +215,15 @@
         if (score >= 150 && !myFrog && typeof Frog !== 'undefined') myFrog = new Frog(p, frogImgs);
         if (myFrog) myFrog.update(enemies, ts, (add) => { score += add; sEl.innerText = score; });
 
+        // 键盘移动逻辑
         if (keys.KeyW || keys.ArrowUp) p.y -= p.spd;
         if (keys.KeyS || keys.ArrowDown) p.y += p.spd;
         if (keys.KeyA || keys.ArrowLeft) p.x -= p.spd;
         if (keys.KeyD || keys.ArrowRight) p.x += p.spd;
+        
+        // 边界限制
+        p.x = Math.max(p.r, Math.min(cvs.width - p.r, p.x));
+        p.y = Math.max(p.r, Math.min(cvs.height - p.r, p.y));
         p.angle += 0.08;
 
         const sSnd = document.getElementById('snd-spray');
@@ -216,16 +247,12 @@
             let dx = p.x - (e.x + e.sz/2), dy = p.y - (e.y + e.sz/2), dist = Math.sqrt(dx*dx + dy*dy);
             let moveX = dx/dist, moveY = dy/dist;
             let finalSpd = e.spd;
-
             if(e.isBoss) {
                 let shift = Math.sin(ts / 180) * 1.4;
                 moveX += (dy/dist) * shift; moveY -= (dx/dist) * shift;
                 if(e.hp < 50) finalSpd *= 1.8;
-                if(Math.random() < 0.015) {
-                    enemies.push({ x: e.x + e.sz/2, y: e.y + e.sz/2, sz: 25, hp: 1, spd: 5, img: imgBoss, isBoss: false });
-                }
+                if(Math.random() < 0.015) enemies.push({ x: e.x + e.sz/2, y: e.y + e.sz/2, sz: 25, hp: 1, spd: 5, img: imgBoss, isBoss: false });
             }
-
             e.x += moveX * finalSpd; e.y += moveY * finalSpd;
 
             if (pInvuln <= 0 && dist < p.r + e.sz/2) {
@@ -236,15 +263,9 @@
                     document.getElementById('gameover-screen').style.display = 'flex';
                 }
             }
-
             bullets.forEach(b => {
-                let bd = Math.sqrt((b.x-(e.x+e.sz/2))**2 + (b.y-(e.y+e.sz/2))**2);
-                if (bd < b.r + e.sz/2) {
-                    let dmg = 0.22; if(e.isBoss && e.hp > 50) dmg *= 0.3;
-                    e.hp -= dmg;
-                }
+                if (Math.sqrt((b.x-(e.x+e.sz/2))**2 + (b.y-(e.y+e.sz/2))**2) < b.r + e.sz/2) e.hp -= (e.isBoss && e.hp > 50) ? 0.07 : 0.22;
             });
-
             if (e.hp <= 0) {
                 const bSnd = document.getElementById('snd-bomb');
                 if(bSnd) { bSnd.currentTime = 0; bSnd.play(); }
@@ -254,40 +275,23 @@
 
         level = Math.floor(score / 500) + 1; lEl.innerText = level;
         ctx.clearRect(0, 0, cvs.width, cvs.height);
-        
         if (myFrog) myFrog.draw(ctx);
-
         bullets.forEach(b => {
             ctx.fillStyle = `rgba(180, 255, 100, ${b.life * 0.5})`;
             ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
         });
-
         enemies.forEach(e => {
             ctx.drawImage(e.img, e.x, e.y, e.sz, e.sz);
             if(e.hp > 0) {
-                if(e.isBoss) {
-                    const maxHp = 150, segs = 3, hpPer = maxHp/segs;
-                    let curSeg = Math.ceil(e.hp/hpPer), segHp = e.hp % hpPer || (e.hp>0?hpPer:0);
-                    const cols = ['#ff0000', '#ffcc00', '#aa00ff'];
-                    ctx.fillStyle = curSeg > 1 ? cols[curSeg-2] : '#333';
-                    ctx.fillRect(e.x, e.y-18, e.sz, 10);
-                    ctx.fillStyle = cols[curSeg-1];
-                    ctx.fillRect(e.x, e.y-18, e.sz * (segHp/hpPer), 10);
-                    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial';
-                    ctx.fillText('x'+curSeg, e.x + e.sz + 8, e.y-8);
-                } else {
-                    ctx.fillStyle = '#f00'; ctx.fillRect(e.x, e.y-8, e.sz, 4);
-                    ctx.fillStyle = '#0f0'; ctx.fillRect(e.x, e.y-8, e.sz * (e.hp/3), 4);
-                }
+                ctx.fillStyle = '#f00'; ctx.fillRect(e.x, e.y-8, e.sz, 4);
+                ctx.fillStyle = '#0f0'; ctx.fillRect(e.x, e.y-8, e.sz * (e.hp / (e.isBoss?150:3)), 4);
             }
         });
-
         ctx.save(); ctx.translate(p.x, p.y);
         if (pInvuln > 0 && Math.floor(ts/100)%2) ctx.globalAlpha = 0.3;
         ctx.rotate(p.angle);
         ctx.drawImage(imgP, -SIZE_PLAYER/2, -SIZE_PLAYER/2, SIZE_PLAYER, SIZE_PLAYER);
         ctx.restore();
-        
         requestAnimationFrame(loop);
     }
 </script>
