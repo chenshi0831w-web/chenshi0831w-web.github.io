@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>害虫ハンター：ガーデン最終決戦</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            /* 背景图设置 */
+            background: url('images/background.jpg') no-repeat center center fixed; 
+            background-size: cover; 
+            background-color: #0a0f0a; 
+            font-family: "Helvetica Neue", Arial, "Meiryo", sans-serif; 
+        }
+        canvas { display: block; }
+        
+        /* UI显示 - 增加半透明黑底，确保在有背景图时依然清晰 */
+        #ui { 
+            position: absolute; top: 20px; left: 20px; color: #0f0; font-size: 22px; z-index: 10; 
+            text-shadow: 2px 2px #000; pointer-events: none;
+            background: rgba(0, 0, 0, 0.5); padding: 8px 15px; border-radius: 10px;
+        }
+        #hp-ui { 
+            position: absolute; top: 20px; right: 20px; display: flex; gap: 25px; z-index: 10;
+            background: rgba(0, 0, 0, 0.5); padding: 12px 20px; border-radius: 10px;
+        }
+        
+        .heart { position: relative; width: 15px; height: 15px; background-color: #ff66cc; transform: rotate(-45deg); }
+        .heart::before, .heart::after { content: ''; position: absolute; width: 15px; height: 15px; background-color: #ff66cc; border-radius: 50%; }
+        .heart::before { top: -7.5px; left: 0; }
+        .heart::after { top: 0; left: 7.5px; }
+
+        /* 遮罩层 UI */
+        .overlay { 
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85); 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            color: #fff; z-index: 100; text-align: center; padding: 20px; box-sizing: border-box; 
+        }
+        
+        .btn-group { display: flex; gap: 20px; margin-top: 20px; z-index: 110; }
+        button { padding: 12px 40px; font-size: 18px; background: #00ffcc; border: none; cursor: pointer; border-radius: 40px; font-weight: bold; color: #111; transition: 0.3s; }
+        button:hover { transform: scale(1.1); background: #fff; }
+
+        /* 图鉴系统 */
+        .book-container { 
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; 
+            max-width: 1000px; max-height: 60vh; overflow-y: auto; padding: 20px;
+        }
+        .bug-card { 
+            background: rgba(255, 255, 255, 0.1); border: 2px solid #00ffcc; 
+            border-radius: 15px; padding: 15px; width: 220px;
+        }
+        .bug-card img { width: 70px; height: 70px; object-fit: contain; }
+        
+        #gameover-screen img { max-width: 80%; max-height: 35vh; object-fit: contain; margin-bottom: 20px; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div id="ui">スコア: <span id="s">0</span> | レベル: <span id="l">1</span></div>
+    <div id="hp-ui"></div>
+    
+    <div id="overlay-start" class="overlay">
+        <h1 style="font-size: 48px; color: #00ffcc; margin-bottom: 10px;">GARDEN HUNTER</h1>
+        <p><b>方向キー / WASD</b>：移動 | <b>スペース</b>：殺虫剤<br>時間が経つほど害虫は増える...生き残れ！</p>
+        <div class="btn-group">
+            <button onclick="startGame()">戦闘開始</button>
+            <button style="background: #ffcc00;" onclick="showBook()">図鑑を見る</button>
+        </div>
+    </div>
+
+    <div id="encyclopedia" class="overlay" style="display: none;">
+        <h1 style="color: #ffcc00;">昆虫図鑑</h1>
+        <div class="book-container" id="book-list"></div>
+        <button style="background: #ff66cc; margin-top: 20px;" onclick="hideBook()">戻る</button>
+    </div>
+
+    <div id="gameover-screen" class="overlay" style="display: none; animation: fadeIn 0.5s ease;">
+        <img src="images/gameover_bg.png" alt="GameOver">
+        <div style="font-size: 32px; color: #ffcc00; margin-bottom: 20px;">SCORE: <span id="final-score">0</span></div>
+        <div class="btn-group">
+            <button onclick="restartGame()">再挑戦</button>
+            <button style="background: #ccc;" onclick="location.reload()">タイトルへ</button>
+        </div>
+    </div>
+
+    <canvas id="g"></canvas>
+    <audio id="snd-spray" src="sound/spray_long.mp3" preload="auto"></audio>
+    <audio id="snd-bomb" src="sound/bomb.mp3" preload="auto"></audio>
+
+    <script src="frog.js"></script>
+<script>
+    const cvs = document.getElementById('g'), ctx = cvs.getContext('2d');
+    const sEl = document.getElementById('s'), lEl = document.getElementById('l'), hpEl = document.getElementById('hp-ui');
+    
+    const SIZE_PLAYER = 60, SIZE_BUG = 50, SIZE_BOSS = 150;
+    const imgP = new Image(); imgP.src = 'images/spray.png';
+    const imgE1 = new Image(); imgE1.src = 'images/01.png'; // 瓢虫
+    const imgE2 = new Image(); imgE2.src = 'images/02.png'; // 蚊子
+    const imgBoss = new Image(); imgBoss.src = 'images/03.png'; // 蟑螂Boss
+
+    const frogImgs = { fIdle: new Image(), fAtk: new Image(), fEat: new Image() };
+    frogImgs.fIdle.src = 'images/frog_idle.png';
+    frogImgs.fAtk.src = 'images/frog_atk.png';
+    frogImgs.fEat.src = 'images/frog_eat.png';
+
+    const bugData = [
+        { name: 'テントウムシ', danger: 'C', img: 'images/01.png', desc: 'よくいる害虫。' },
+        { name: 'カ（蚊）', danger: 'B', img: 'images/02.png', desc: '素早く血を狙う。' },
+        { name: '黒い悪魔', danger: 'SSS', img: 'images/03.png', desc: '圧倒的な生命力。子供を産み落として増殖する。' }
+    ];
+
+    let score, level, active = false, keys = {}, bullets = [], enemies = [], lastSpawn, pHP, pInvuln, myFrog, gameStartTime;
+    let p = { x: 0, y: 0, r: 25, spd: 7, angle: 0, lf: 0 };
+
+    cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+    window.onkeydown = e => keys[e.code] = true;
+    window.onkeyup = e => { 
+        keys[e.code] = false; 
+        if(e.code === 'Space') document.getElementById('snd-spray').pause(); 
+    };
+
+    function showBook() {
+        document.getElementById('encyclopedia').style.display = 'flex';
+        const list = document.getElementById('book-list');
+        list.innerHTML = '';
+        bugData.forEach(bug => {
+            list.innerHTML += `<div class="bug-card">
+                <img src="${bug.img}"><h3>${bug.name}</h3>
+                <div style="color:#ffcc00">危険度: ${bug.danger}</div>
+                <p style="font-size:14px">${bug.desc}</p>
+            </div>`;
+        });
+    }
+    function hideBook() { document.getElementById('encyclopedia').style.display = 'none'; }
+
+    function startGame() {
+        document.getElementById('overlay-start').style.display = 'none';
+        document.getElementById('gameover-screen').style.display = 'none';
+        score = 0; level = 1; bullets = []; enemies = []; pHP = 3; pInvuln = 0; active = true;
+        myFrog = null; sEl.innerText = "0"; lEl.innerText = "1";
+        gameStartTime = performance.now();
+        p.x = cvs.width/2; p.y = cvs.height/2;
+        updateHPUI();
+        lastSpawn = performance.now();
+        requestAnimationFrame(loop);
+    }
+
+    function restartGame() { startGame(); }
+
+    function updateHPUI() {
+        hpEl.innerHTML = '';
+        for(let i=0; i<pHP; i++) hpEl.innerHTML += `<div class="heart"></div>`;
+    }
+
+    function spawnEnemy() {
+        let type = Math.random();
+        let en = { x: 0, y: 0, sz: SIZE_BUG, hp: 3, spd: 1.5 + (level*0.2), img: imgE1, isBoss: false };
+        
+        // 分数大于400有概率出 Boss (03.png)
+        if(score > 400 && type > 0.88) { 
+            en.sz = SIZE_BOSS; en.hp = 150; en.spd = 2.4; en.img = imgBoss; en.isBoss = true;
+        } else if(type > 0.5) { 
+            en.img = imgE2; en.hp = 3; en.spd *= 1.6; 
+        }
+
+        let side = Math.floor(Math.random()*4);
+        if(side==0){ en.x=Math.random()*cvs.width; en.y=-en.sz; }
+        else if(side==1){ en.x=Math.random()*cvs.width; en.y=cvs.height+en.sz; }
+        else if(side==2){ en.x=-en.sz; en.y=Math.random()*cvs.height; }
+        else { en.x=cvs.width+en.sz; en.y=Math.random()*cvs.height; }
+        enemies.push(en);
+    }
+
+    function loop(ts) {
+        if (!active) return;
+
+        // --- 时间难度递增 ---
+        let secondsPassed = (ts - gameStartTime) / 1000;
+        let dynamicInterval = Math.max(250, (1400 - level * 100) - (secondsPassed * 8));
+
+        if (ts - lastSpawn > dynamicInterval) { 
+            spawnEnemy();
+            if (secondsPassed > 60 && Math.random() < 0.3) spawnEnemy(); // 1分钟后概率刷双倍
+            lastSpawn = ts;
+        }
+
+        if (pInvuln > 0) pInvuln -= 16;
+        if (score >= 150 && !myFrog && typeof Frog !== 'undefined') myFrog = new Frog(p, frogImgs);
+        if (myFrog) myFrog.update(enemies, ts, (add) => { score += add; sEl.innerText = score; });
+
+        // --- 移动控制：同时支持 WASD 和 方向键 ---
+        if (keys.KeyW || keys.ArrowUp) p.y -= p.spd;
+        if (keys.KeyS || keys.ArrowDown) p.y += p.spd;
+        if (keys.KeyA || keys.ArrowLeft) p.x -= p.spd;
+        if (keys.KeyD || keys.ArrowRight) p.x += p.spd;
+        p.angle += 0.08;
+
+        // 喷射逻辑
+        const sSnd = document.getElementById('snd-spray');
+        if (keys.Space) {
+            if(sSnd.paused) sSnd.play();
+            if(ts - p.lf > 65) {
+                for(let i=0; i<3; i++) {
+                    let ang = p.angle + (Math.random()-0.5)*0.6;
+                    bullets.push({ x: p.x, y: p.y, vx: Math.cos(ang)*14, vy: Math.sin(ang)*14, life: 1.0, r: 5 });
+                }
+                p.lf = ts;
+            }
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i]; b.x += b.vx; b.y += b.vy; b.life -= 0.035; b.r += 0.4;
+            if (b.life <= 0) bullets.splice(i, 1);
+        }
+
+        enemies.forEach((e, ei) => {
+            let dx = p.x - (e.x + e.sz/2), dy = p.y - (e.y + e.sz/2), dist = Math.sqrt(dx*dx + dy*dy);
+            let moveX = dx/dist, moveY = dy/dist;
+            let finalSpd = e.spd;
+
+            // Boss 行为
+            if(e.isBoss) {
+                let shift = Math.sin(ts / 180) * 1.4;
+                moveX += (dy/dist) * shift; moveY -= (dx/dist) * shift;
+                if(e.hp < 50) finalSpd *= 1.8;
+                
+                // --- 产卵逻辑：产下缩小版的自己 (03.png) ---
+                if(Math.random() < 0.015) {
+                    enemies.push({ x: e.x + e.sz/2, y: e.y + e.sz/2, sz: 25, hp: 1, spd: 5, img: imgBoss, isBoss: false });
+                }
+            }
+
+            e.x += moveX * finalSpd; e.y += moveY * finalSpd;
+
+            if (pInvuln <= 0 && dist < p.r + e.sz/2) {
+                pHP--; updateHPUI(); pInvuln = 1500;
+                if (pHP <= 0) { 
+                    active = false; sSnd.pause();
+                    document.getElementById('final-score').innerText = score;
+                    document.getElementById('gameover-screen').style.display = 'flex';
+                }
+            }
+
+            bullets.forEach(b => {
+                let bd = Math.sqrt((b.x-(e.x+e.sz/2))**2 + (b.y-(e.y+e.sz/2))**2);
+                if (bd < b.r + e.sz/2) {
+                    let dmg = 0.22; if(e.isBoss && e.hp > 50) dmg *= 0.3;
+                    e.hp -= dmg;
+                }
+            });
+
+            if (e.hp <= 0) {
+                const bSnd = document.getElementById('snd-bomb');
+                if(bSnd) { bSnd.currentTime = 0; bSnd.play(); }
+                enemies.splice(ei, 1); score += 10; sEl.innerText = score;
+            }
+        });
+
+        level = Math.floor(score / 500) + 1; lEl.innerText = level;
+        ctx.clearRect(0, 0, cvs.width, cvs.height);
+        
+        if (myFrog) myFrog.draw(ctx);
+
+        bullets.forEach(b => {
+            ctx.fillStyle = `rgba(180, 255, 100, ${b.life * 0.5})`;
+            ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 7); ctx.fill();
+        });
+
+        enemies.forEach(e => {
+            ctx.drawImage(e.img, e.x, e.y, e.sz, e.sz);
+            if(e.hp > 0) {
+                if(e.isBoss) {
+                    const maxHp = 150, segs = 3, hpPer = maxHp/segs;
+                    let curSeg = Math.ceil(e.hp/hpPer), segHp = e.hp % hpPer || (e.hp>0?hpPer:0);
+                    const cols = ['#ff0000', '#ffcc00', '#aa00ff'];
+                    ctx.fillStyle = curSeg > 1 ? cols[curSeg-2] : '#333';
+                    ctx.fillRect(e.x, e.y-18, e.sz, 10);
+                    ctx.fillStyle = cols[curSeg-1];
+                    ctx.fillRect(e.x, e.y-18, e.sz * (segHp/hpPer), 10);
+                    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial';
+                    ctx.fillText('x'+curSeg, e.x + e.sz + 8, e.y-8);
+                } else {
+                    ctx.fillStyle = '#f00'; ctx.fillRect(e.x, e.y-8, e.sz, 4);
+                    ctx.fillStyle = '#0f0'; ctx.fillRect(e.x, e.y-8, e.sz * (e.hp/3), 4);
+                }
+            }
+        });
+
+        ctx.save(); ctx.translate(p.x, p.y);
+        if (pInvuln > 0 && Math.floor(ts/100)%2) ctx.globalAlpha = 0.3;
+        ctx.rotate(p.angle);
+        ctx.drawImage(imgP, -SIZE_PLAYER/2, -SIZE_PLAYER/2, SIZE_PLAYER, SIZE_PLAYER);
+        ctx.restore();
+        
+        requestAnimationFrame(loop);
+    }
+</script>
+</body>
+</html>
